@@ -92,6 +92,7 @@ class Updater
                             ->select('id');
                 $hash_ids = $hash_id->fetchAll('id', 'id');
                 if (count($hash_ids)) {
+                    unset(self::$hash_pool[$pool_height]);
                     foreach ($hash_ids as $id => $hash_data) {
                         self::addHashBlock($id, $pool_height);
                     }
