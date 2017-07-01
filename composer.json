@@ -1,0 +1,7 @@
+{
+    "require": {
+        "guzzlehttp/guzzle": "^6.3",
+        "fpdo/fluentpdo": "^1.1"
+    },
+    "minimum-stability": "dev"
+}
