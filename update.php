@@ -102,7 +102,7 @@ class Updater
         }
 
         if (count(self::$block_pool)) {
-            self::$db->insertInto('block_hash_index', self::$block_pool)->execute();
+            self::$db->insertInto('block_hash_index', self::$block_pool)->ignore()->execute();
             self::$block_pool = [];
         }
     }
