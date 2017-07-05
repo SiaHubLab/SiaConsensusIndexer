@@ -29,7 +29,7 @@ Please follow these steps for pull requests:
 
 ## Contributors
 
-Check out all the super awesome [contributors](https://github.com/S-anasol/SiaConsensusExplorer/graphs/contributors).
+Check out all the super awesome [contributors](https://github.com/S-anasol/SiaConsensusIndexer/graphs/contributors).
 
 
 ## License
