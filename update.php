@@ -3,111 +3,12 @@ require('vendor/autoload.php');
 use GuzzleHttp\Pool;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
+use App\Updater;
 
-/*
- * Blockchain indexer
- *
- **/
-class Updater
-{
-    public static $db = false;
-    public static $hash_pool = [];
-    public static $block_pool = [];
+$dotenv = new Dotenv\Dotenv(__DIR__);
+$dotenv->load();
 
-    /**
-     * Init indexer
-     *
-     * Initiate indexer with FluentPDO DB instance
-     *
-     * @param FluentPDO $db FluentPDO instance
-     */
-    public static function init($db)
-    {
-        self::$db = $db;
-    }
-
-    /**
-     * Add blockchain hash to database
-     *
-     * Add hash to database with specified type and height
-     *
-     * @param string $hash Hash
-     * @param string $type Type 'blockid', 'transactionid', 'unlockhash', 'siacoinoutputid', 'filecontractid', 'siafundoutputid'
-     * @param string $height Block height where hash appears
-     */
-    public static function addHash($hash, $type, $height)
-    {
-        self::$hash_pool[$height][] = [
-            'hash' => $hash,
-            'type' => $type,
-        ];
-
-        if (count(self::$hash_pool) > 10) {
-            self::cleanPool();
-        }
-    }
-
-    /**
-     * Add hash reference to block height
-     *
-     * Add hash_id reference to specified height
-     *
-     * @param int $hash_id Hash
-     * @param string $height Block height where hash appears
-     */
-    public static function addHashBlock($hash_id, $height)
-    {
-        if ($hash_id <= 0) {
-            return false;
-        }
-
-        self::$block_pool[] = [
-            'hash_id' => $hash_id,
-            'height' => $height,
-        ];
-
-        if (count(self::$block_pool) > 5000) {
-            self::cleanPool();
-        }
-    }
-
-    /**
-     * Insert pool data into DB
-     *
-     * Insert collected data into database and clean pools
-     *
-     */
-    public static function cleanPool()
-    {
-        if (count(self::$hash_pool)) {
-            foreach (self::$hash_pool as $pool_height => $hashes) {
-                self::$db->insertInto('hashes', $hashes)->ignore()->execute();
-
-                $select = [];
-                foreach ($hashes as $_hash) {
-                    $select[] = $_hash['hash'];
-                }
-                $hash_id = self::$db->from('hashes')
-                            ->where('hash', $select)
-                            ->select('id');
-                $hash_ids = $hash_id->fetchAll('id', 'id');
-                if (count($hash_ids)) {
-                    foreach ($hash_ids as $id => $hash_data) {
-                        self::addHashBlock($id, $pool_height);
-                    }
-                }
-            }
-            self::$hash_pool = [];
-        }
-
-        if (count(self::$block_pool)) {
-            self::$db->insertInto('block_hash_index', self::$block_pool)->execute();
-            self::$block_pool = [];
-        }
-    }
-}
-
-$pdo = new PDO('mysql:host=localhost;dbname=explorer', 'root', 'root');
+$pdo = new PDO('mysql:host='.getenv('DB_HOST').';dbname='.getenv('DB_NAME').'', getenv('DB_USER'), getenv('DB_PASSWORD'));
 $fpdo = new FluentPDO($pdo);
 $fpdo->debug = false;
 
@@ -119,7 +20,7 @@ $client = new Client([
    ]
  ]);
 
-$res = $client->request('GET', 'http://localhost:9980/consensus');
+$res = $client->request('GET', getenv('SIAD').'/consensus');
 $consensus = json_decode($res->getBody());
 
 $last_height = $fpdo->from('block_hash_index')
@@ -133,14 +34,19 @@ if (empty($last_height['height'])) {
 
 $requests = function () use ($consensus, $last_height) {
     for ($i=$last_height-10; $i < $consensus->height; $i++) {
-        yield new Request('GET', 'http://localhost:9980/consensus/blocks/'.$i);
+        yield new Request('GET', getenv('SIAD').'/consensus/blocks/'.$i);
     }
 };
 
+$times = []; //Some stats
+$slowest = [];
+$fastest = [];
+
 $pool = new Pool($client, $requests(), [
     'concurrency' => 20,
-    'fulfilled' => function ($response, $index) use ($fpdo) {
-        echo 'Completed request '.$index.PHP_EOL;
+    'fulfilled' => function ($response, $index) use ($fpdo, &$times, &$slowest, &$fastest) {
+        //echo 'Completed request '.$index.PHP_EOL;
+        $block_start = microtime(true);
         $json = json_decode($response->getBody());
 
         $height = $json->blockheight;
@@ -180,6 +86,25 @@ $pool = new Pool($client, $requests(), [
                 }
             }
 
+            foreach ($transaction->filecontractrevisions as $filecontractid => $fc) {
+                Updater::addHash($fc->parentid, 'filecontractid', $height);
+                Updater::addHash($fc->newunlockhash, 'unlockhash', $height);
+
+                foreach ($fc->newvalidproofoutputs as $key => $value) {
+                    Updater::addHash($key, 'siacoinoutputid', $height);
+                    Updater::addHash($value->unlockhash, 'unlockhash', $height);
+                }
+                foreach ($fc->newmissedproofoutputs as $key => $value) {
+                    Updater::addHash($key, 'siacoinoutputid', $height);
+                    Updater::addHash($value->unlockhash, 'unlockhash', $height);
+                }
+            }
+
+            foreach ($transaction->storageproofs as $scinoputid => $scinoput) {
+                Updater::addHash($scinoput->parentid, 'filecontractid', $height);
+                Updater::addProof($scinoputid, $scinoput->parentid, $height);
+            }
+
             foreach ($transaction->siafundinputs as $scinoputid => $scinoput) {
                 Updater::addHash($scinoputid, 'siafundoutputid', $height);
             }
@@ -188,6 +113,19 @@ $pool = new Pool($client, $requests(), [
                 Updater::addHash($scoutputid, 'siafundoutputid', $height);
                 Updater::addHash($scoutput->unlockhash, 'unlockhash', $height);
             }
+        }
+
+        $block_end = microtime(true);
+        $process_time = $block_end-$block_start;
+        echo "Block#{$height} processed in ".round($process_time, 4)."s".PHP_EOL;
+        $times[] = $process_time;
+
+        if (empty($slowest['height']) || $process_time > $slowest['time']) {
+            $slowest = ['height' => $height, 'time' => round($process_time, 8)];
+        }
+
+        if (empty($fastest['height']) || $process_time < $fastest['time']) {
+            $fastest = ['height' => $height, 'time' => round($process_time, 8)];
         }
     },
     'rejected' => function ($reason, $index) {
@@ -198,3 +136,10 @@ $promise = $pool->promise();
 $promise->wait();
 
 Updater::cleanPool();
+Updater::cleanProofPool();
+Updater::dumpProofs();
+
+$avg = round(array_sum($times)/count($times), 3);
+echo "Avg. process time: {$avg}s".PHP_EOL;
+echo "Slowest: {$slowest['height']} -> {$slowest['time']}s".PHP_EOL;
+echo "Fastest: {$fastest['height']} -> {$fastest['time']}s".PHP_EOL;
