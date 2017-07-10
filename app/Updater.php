@@ -179,6 +179,9 @@ class Updater
                                     'fc_hash_id' => $fc_hash_id,
                                     'proof_hash_id' => $proof_hash_id,
                                 ];
+                                if (count(self::$ready_proof_pool) > 100) {
+                                    self::dumpProofs();
+                                }
                             } else {
                                 echo "Pair not found {$_hash['fc_hash_id']} || {$_hash['proof_hash_id']}".PHP_EOL;
                             }
@@ -186,10 +189,6 @@ class Updater
                     }
                 }
             }
-        }
-
-        if (count(self::$ready_proof_pool) > 100) {
-            self::dumpProofs();
         }
     }
 

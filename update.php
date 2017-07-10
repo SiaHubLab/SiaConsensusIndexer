@@ -79,10 +79,12 @@ $pool = new Pool($client, $requests(), [
                 foreach ($fc->validproofoutputs as $key => $value) {
                     Updater::addHash($key, 'siacoinoutputid', $height);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
+                    Updater::addProof($key, $filecontractid, $height);
                 }
                 foreach ($fc->missedproofoutputs as $key => $value) {
                     Updater::addHash($key, 'siacoinoutputid', $height);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
+                    Updater::addProof($key, $filecontractid, $height);
                 }
             }
 
@@ -93,16 +95,17 @@ $pool = new Pool($client, $requests(), [
                 foreach ($fc->newvalidproofoutputs as $key => $value) {
                     Updater::addHash($key, 'siacoinoutputid', $height);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
+                    Updater::addProof($key, $fc->parentid, $height);
                 }
                 foreach ($fc->newmissedproofoutputs as $key => $value) {
                     Updater::addHash($key, 'siacoinoutputid', $height);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
+                    Updater::addProof($key, $fc->parentid, $height);
                 }
             }
 
             foreach ($transaction->storageproofs as $scinoputid => $scinoput) {
                 Updater::addHash($scinoput->parentid, 'filecontractid', $height);
-                Updater::addProof($scinoputid, $scinoput->parentid, $height);
             }
 
             foreach ($transaction->siafundinputs as $scinoputid => $scinoput) {
