@@ -11,6 +11,7 @@ class Updater
     public static $hash_pool = [];
     public static $block_pool = [];
     public static $proof_pool = [];
+    public static $spent_pool = [];
     public static $proof_prepare_queue = [];
     public static $ready_proof_pool = [];
 
@@ -34,15 +35,33 @@ class Updater
      * @param string $hash Hash
      * @param string $type Type 'blockid', 'transactionid', 'unlockhash', 'siacoinoutputid', 'filecontractid', 'siafundoutputid'
      * @param string $height Block height where hash appears
+     * @param integer $amount Siaccoin output amount
      */
-    public static function addHash($hash, $type, $height)
+    public static function addHash($hash, $type, $height, $amount = null)
     {
         self::$hash_pool[$height][] = [
             'hash' => $hash,
             'type' => $type,
+            'amount' => $amount,
         ];
 
         if (count(self::$hash_pool) > 10) {
+            self::cleanPool();
+        }
+    }
+
+    /**
+     * Add spent flag
+     *
+     * Add spent flag to hash
+     *
+     * @param string $hash Hash
+     */
+    public static function addSpent($hash)
+    {
+        self::$spent_pool[] = $hash;
+
+        if (count(self::$spent_pool) > 5000) {
             self::cleanPool();
         }
     }
@@ -120,6 +139,19 @@ class Updater
         if (count(self::$block_pool)) {
             self::$db->insertInto('block_hash_index', self::$block_pool)->ignore()->execute();
             self::$block_pool = [];
+        }
+
+        if (count(self::$spent_pool)) {
+            $hashes = self::$spent_pool;
+            self::$db->update('hashes')
+                     ->set([
+                         'spent' => 1
+                     ])
+                     ->where('hash', $hashes)
+                     ->execute();
+            self::$spent_pool = [];
+            echo "spent pool cleaned: ".count($hashes).PHP_EOL;
+            unset($hashes);
         }
     }
 

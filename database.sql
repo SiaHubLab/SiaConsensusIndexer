@@ -22,3 +22,14 @@ CREATE TABLE `filecontract_proof_index` (
   KEY `fc_hash_id_index` (`fc_hash_id`),
   KEY `proof_hash_id_index` (`proof_hash_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+ALTER TABLE hashes ADD amount VARCHAR(30) DEFAULT NULL  NULL;
+ALTER TABLE hashes ADD spent BOOLEAN DEFAULT FALSE  NULL;
+
+CREATE TABLE `tx_index` (
+  `tx_id` int(11) DEFAULT NULL,
+  `address_id` int(11) DEFAULT NULL,
+  UNIQUE KEY `idx_name` (`tx_id`,`address_id`),
+  KEY `tx_id_index` (`tx_id`),
+  KEY `address_id_index` (`address_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;

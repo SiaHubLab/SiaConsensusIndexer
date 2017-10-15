@@ -33,7 +33,7 @@ if (empty($last_height['height'])) {
 }
 
 $requests = function () use ($consensus, $last_height) {
-    for ($i=$last_height-10; $i < $consensus->height; $i++) {
+    for ($i=$last_height-10; $i <= $consensus->height; $i++) {
         yield new Request('GET', getenv('SIAD').'/consensus/blocks/'.$i);
     }
 };
@@ -56,7 +56,7 @@ $pool = new Pool($client, $requests(), [
         Updater::addHash($prev_block_hash, 'blockid', $prev_height);
 
         foreach ($json->minerpayouts as $outputid => $output) {
-            Updater::addHash($outputid, 'siacoinoutputid', $height);
+            Updater::addHash($outputid, 'siacoinoutputid', $height, $output->value);
             Updater::addHash($output->unlockhash, 'unlockhash', $height);
         }
 
@@ -64,11 +64,12 @@ $pool = new Pool($client, $requests(), [
             Updater::addHash($transactionid, 'transactionid', $height);
 
             foreach ($transaction->siacoininputs as $scinoputid => $scinoput) {
+                Updater::addSpent($scinoputid);
                 Updater::addHash($scinoputid, 'siacoinoutputid', $height);
             }
 
             foreach ($transaction->siacoinoutputs as $scoutputid => $scoutput) {
-                Updater::addHash($scoutputid, 'siacoinoutputid', $height);
+                Updater::addHash($scoutputid, 'siacoinoutputid', $height, $scoutput->value);
                 Updater::addHash($scoutput->unlockhash, 'unlockhash', $height);
             }
 
@@ -77,12 +78,12 @@ $pool = new Pool($client, $requests(), [
                 Updater::addHash($fc->unlockhash, 'unlockhash', $height);
 
                 foreach ($fc->validproofoutputs as $key => $value) {
-                    Updater::addHash($key, 'siacoinoutputid', $height);
+                    Updater::addHash($key, 'siacoinoutputid', $height, $value->value);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
                     Updater::addProof($key, $filecontractid, $height);
                 }
                 foreach ($fc->missedproofoutputs as $key => $value) {
-                    Updater::addHash($key, 'siacoinoutputid', $height);
+                    Updater::addHash($key, 'siacoinoutputid', $height, $value->value);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
                     Updater::addProof($key, $filecontractid, $height);
                 }
@@ -93,12 +94,12 @@ $pool = new Pool($client, $requests(), [
                 Updater::addHash($fc->newunlockhash, 'unlockhash', $height);
 
                 foreach ($fc->newvalidproofoutputs as $key => $value) {
-                    Updater::addHash($key, 'siacoinoutputid', $height);
+                    Updater::addHash($key, 'siacoinoutputid', $height, $value->value);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
                     Updater::addProof($key, $fc->parentid, $height);
                 }
                 foreach ($fc->newmissedproofoutputs as $key => $value) {
-                    Updater::addHash($key, 'siacoinoutputid', $height);
+                    Updater::addHash($key, 'siacoinoutputid', $height, $value->value);
                     Updater::addHash($value->unlockhash, 'unlockhash', $height);
                     Updater::addProof($key, $fc->parentid, $height);
                 }
@@ -109,11 +110,12 @@ $pool = new Pool($client, $requests(), [
             }
 
             foreach ($transaction->siafundinputs as $scinoputid => $scinoput) {
-                Updater::addHash($scinoputid, 'siafundoutputid', $height);
+                Updater::addSpent($scinoputid);
+                Updater::addHash($scinoputid, 'siafundoutputid', $height, $scinoput->value);
             }
 
             foreach ($transaction->siafundoutputs as $scoutputid => $scoutput) {
-                Updater::addHash($scoutputid, 'siafundoutputid', $height);
+                Updater::addHash($scoutputid, 'siafundoutputid', $height, $scoutput->value);
                 Updater::addHash($scoutput->unlockhash, 'unlockhash', $height);
             }
         }
