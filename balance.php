@@ -83,24 +83,50 @@ function process_block($block)
     echo "process ".$block->blockheight.PHP_EOL;
     $processed[$block->blockheight] = 1;
 
+    foreach ($block->minerpayouts as $scoutputid => $scoutput) {
+        $fpdo->update('hashes')
+            ->set([
+                'amount' => $scoutput->value
+            ])
+            ->where('hash', $scoutputid)
+            ->execute();
+
+        if (!isset($address_ids[$scoutputid])) {
+            $tx = $fpdo->from('hashes')
+                ->select('id')
+                ->where('hash', $scoutputid)
+                ->limit(1);
+            $tx = $tx->fetch();
+            $tx_id = (!empty($tx['id'])) ? $tx['id']:false;
+            $address_ids[$scoutputid] = $tx_id;
+        }
+
+        if (!isset($address_ids[$scoutput->unlockhash])) {
+            $address = $fpdo->from('hashes')
+                ->select('id')
+                ->where('hash', $scoutput->unlockhash)
+                ->limit(1);
+            $address = $address->fetch();
+            $address_id = (!empty($address['id'])) ? $address['id']:false;
+            $address_ids[$scoutput->unlockhash] = $address_id;
+        }
+
+        if ($address_ids[$scoutput->unlockhash] && $address_ids[$scoutputid]) {
+            $tx_pool[] = ['tx_id' => $address_ids[$scoutputid], 'address_id' => $address_ids[$scoutput->unlockhash]];
+
+            if (count($tx_pool) >= 10000) {
+                $fpdo->insertInto('tx_index', $tx_pool)->ignore()->execute();
+                $tx_pool = [];
+            }
+        }
+    }
+
     foreach ($block->transactions as $transactionid => $transaction) {
         foreach ($transaction->siacoininputs as $scinoputid => $scinoput) {
-            // $flatdata['in_'.$scinoputid] = [
-            //     'parent_id' => $scinoputid,
-            //     'id' => 'in_'.$scinoputid,
-            //     'raw' => (array) $scinoput,
-            //     'type' => 'in'
-            // ];
             $spent_pool[] = $scinoputid;
         }
 
         foreach ($transaction->siacoinoutputs as $scoutputid => $scoutput) {
-            // $flatdata[$scoutputid] = [
-            //     'id' => $scoutputid,
-            //     'parent_id' => $transactionid,
-            //     'raw' => (array) $scoutput,
-            //     'type' => 'out'
-            // ];
             $fpdo->update('hashes')
                  ->set([
                      'amount' => $scoutput->value
