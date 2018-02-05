@@ -49,8 +49,19 @@ $client = new Client([
 $res = $client->request('GET', getenv('SIAD').'/consensus');
 $consensus = json_decode($res->getBody());
 
-$requests = function () use ($consensus, $memcache) {
-    $last_block = $memcache->get('last_block_balance');
+$requests = function () use ($consensus, $memcache, $fpdo) {
+    $last_height = $fpdo->from('tx_index')
+        ->select('block_hash_index.*')
+        ->leftJoin('block_hash_index ON block_hash_index.hash_id = tx_index.tx_id')
+        ->orderBy('tx_id desc')
+        ->limit(1);
+    $last_height = $last_height->fetch();
+    if (empty($last_height['height'])) {
+        $last_block = 1;
+    } else {
+        $last_block = $last_height['height'];
+    }
+
     echo "start from: {$last_block}".PHP_EOL;
     for ($i=($last_block) ? $last_block-100:1; $i <= $consensus->height; $i++) {
         $cache = $memcache->get('block_'.$i);
